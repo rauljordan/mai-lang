@@ -17,6 +17,11 @@ pub enum Expr {
     Literal {
         value: String,
     },
+    Call {
+        callee: Box<Expr>,
+        paren: Token,
+        args: Vec<Box<Expr>>,
+    },
 }
 
 #[derive(Debug)]
@@ -95,7 +100,35 @@ impl Parser {
             let right = self.unary();
             return Expr::UnaryExpr { op, right: Box::new(right) };
         }
-        return self.primary();
+        return self.call();
+    }
+    pub fn call(&mut self) -> Expr {
+        let mut expr = self.primary();
+        loop {
+            if self.check_match(
+                vec!(Token::LParen)
+            ) {
+                expr = self.finish_call(expr);
+            } else {
+                break;
+            }
+        }
+        return expr;
+    }
+    pub fn finish_call(&mut self, expr: Expr) -> Expr {
+        let mut args = vec!();
+        if !self.check(Token::RParen) {
+            let mut sub_expr = self.expression();
+            args.push(Box::new(sub_expr));
+            while self.check_match(
+                vec!(Token::Comma)
+            ) {
+                sub_expr = self.expression();
+                args.push(Box::new(sub_expr));
+            }
+        }
+        let paren = self.consume(Token::RParen);
+        return Expr::Call { callee: Box::new(expr), paren, args };
     }
     pub fn primary(&mut self) -> Expr {
         if self.check_match(vec!(Token::False)) {
@@ -138,10 +171,11 @@ impl Parser {
         }
         return self.peek() == tok;
     }
-    fn consume(&mut self, tok: Token) {
+    fn consume(&mut self, tok: Token) -> Token {
         if self.check(tok) {
             self.advance();
         } 
+        self.previous()
     }
     fn advance(&mut self) {
         self.current += 1;

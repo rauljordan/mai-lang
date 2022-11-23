@@ -71,6 +71,9 @@ impl<'a> TokenLexer<'a> {
         curr += 1;
 
         let result = match next.unwrap() {
+            '(' => Ok(Token::LParen),
+            ')' => Ok(Token::RParen),
+            ',' => Ok(Token::Comma),
             '0'..='9' | '.' => {
                 loop {
                     let ch = match chars.peek() {
@@ -107,8 +110,6 @@ impl<'a> TokenLexer<'a> {
                     ident => Ok(Token::Ident(ident.to_string())),
                 }
             },
-            '(' => Ok(Token::LParen),
-            ')' => Ok(Token::RParen),
             op => {
                 // Peeks to see if the next character is
                 // is the one specified, and returns the token at the first

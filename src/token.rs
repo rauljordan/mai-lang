@@ -20,6 +20,7 @@ pub enum Token {
     // Grouping ops.
     LParen,
     RParen,
+    Comma,
     // Literals and identifiers.
     True,
     False,
