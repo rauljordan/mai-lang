@@ -3,6 +3,7 @@ use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::passes::PassManager;
 use inkwell::values::{FloatValue, FunctionValue};
+use inkwell::FloatPredicate;
 
 use crate::parser::Expr;
 use crate::token::Token;
@@ -31,6 +32,7 @@ impl<'a, 'ctx> LLVMTranslator<'a, 'ctx> {
 
                     match op {
                         Token::Plus => Ok(self.builder.build_float_add(lhs, rhs, "tmpadd")),
+                        //Token::Eqq => Ok(self.builder.build_float_compare(FloatPredicate::OEQ, lhs, rhs, "tmpadd")),
                         _ => Err("unsupported binary operation"),
                     }
             },
