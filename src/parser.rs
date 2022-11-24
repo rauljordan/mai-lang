@@ -17,6 +17,13 @@ pub enum Expr {
     Literal {
         value: String,
     },
+    Assign {
+        name: Token,
+        value: Box<Expr>,
+    },
+    Variable {
+        name: Token,
+    },
     Call {
         callee: Box<Expr>,
         paren: Token,
@@ -28,6 +35,10 @@ pub enum Expr {
 pub enum Stmt {
     Expr(Box<Expr>),
     Print(Box<Expr>),
+    Var {
+        name: Token,
+        initializer: Box<Expr>,
+    },
 }
 
 #[derive(Debug)]
@@ -50,15 +61,36 @@ impl Parser {
     pub fn parse(&mut self) -> Vec<Box<Stmt>> {
         let mut statements = vec!();
         while !self.is_at_end() {
-            statements.push(self.statement());
+            statements.push(self.declaration());
         }
         return statements;
     }
+    pub fn declaration(&mut self) -> Box<Stmt> {
+        if self.check_match(vec!(Token::Var)) {
+            return self.variable_declaration();
+        }
+        self.statement()
+    }
+    pub fn variable_declaration(&mut self) -> Box<Stmt> {
+        let name = match self.peek() {
+            Token::Ident(_) => {
+                self.advance();
+                self.previous()
+            },
+            _ => panic!("cannot match")
+        };
+        let mut initializer = Expr::Literal { value: "false".to_string() };
+        if self.check_match(vec!(Token::Eq)) {
+            initializer = self.expression();
+        }
+        self.consume(Token::Semicolon);
+        Box::new(Stmt::Var{ name, initializer: Box::new(initializer) })
+    }
     pub fn statement(&mut self) -> Box<Stmt> {
-        let expr = self.expressionStatement();
+        let expr = self.expression_statement();
         Box::new(expr)
     }
-    pub fn expressionStatement(&mut self) -> Stmt {
+    pub fn expression_statement(&mut self) -> Stmt {
         let value = self.expression();
         self.consume(Token::Semicolon);
         Stmt::Expr(Box::new(value))
@@ -164,9 +196,9 @@ impl Parser {
                 self.advance();
                 return Expr::Literal { value: n };
             },
-            Token::Ident(id) => {
+            Token::Ident(_) => {
                 self.advance();
-                return Expr::Literal { value: id };
+                return Expr::Variable { name: self.previous() };
             },
             _ => {}
         }
