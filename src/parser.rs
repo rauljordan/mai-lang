@@ -25,6 +25,12 @@ pub enum Expr {
 }
 
 #[derive(Debug)]
+pub enum Stmt {
+    Expr(Box<Expr>),
+    Print(Box<Expr>),
+}
+
+#[derive(Debug)]
 pub struct Parser {
     pub tokens: Vec<Token>,
     current: usize,
@@ -40,6 +46,22 @@ macro_rules! bin_expr {
 impl Parser {
     pub fn new(tokens: Vec<Token>) -> Self {
         Self { tokens, current: 0 }
+    }
+    pub fn parse(&mut self) -> Vec<Box<Stmt>> {
+        let mut statements = vec!();
+        while !self.is_at_end() {
+            statements.push(self.statement());
+        }
+        return statements;
+    }
+    pub fn statement(&mut self) -> Box<Stmt> {
+        let expr = self.expressionStatement();
+        Box::new(expr)
+    }
+    pub fn expressionStatement(&mut self) -> Stmt {
+        let value = self.expression();
+        self.consume(Token::Semicolon);
+        Stmt::Expr(Box::new(value))
     }
     pub fn expression(&mut self) -> Expr {
         return self.equality();

@@ -21,6 +21,7 @@ pub enum Token {
     LParen,
     RParen,
     Comma,
+    Semicolon,
     // Literals and identifiers.
     True,
     False,
