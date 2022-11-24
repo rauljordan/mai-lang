@@ -22,7 +22,11 @@ pub enum Token {
     RParen,
     Comma,
     Semicolon,
+    LBrace,
+    RBrace,
     // Literals and identifiers.
+    If,
+    Else,
     True,
     False,
     Number(String),

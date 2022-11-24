@@ -11,6 +11,11 @@ pub enum Expr {
         op: Token,
         right: Box<Expr>,
     },
+    Cond {
+        op: Token,
+        left: Box<Expr>,
+        right: Box<Expr>,
+    },
     Grouping {
         expr: Box<Expr>,
     },
@@ -33,8 +38,14 @@ pub enum Expr {
 
 #[derive(Debug)]
 pub enum Stmt {
+    Block(Vec<Box<Stmt>>),
     Expr(Box<Expr>),
     Print(Box<Expr>),
+    If {
+        cond: Box<Expr>,
+        then_branch: Box<Stmt>,
+        else_branch: Option<Box<Stmt>>,
+    },
     Var {
         name: Token,
         initializer: Box<Expr>,
@@ -87,8 +98,33 @@ impl Parser {
         Box::new(Stmt::Var{ name, initializer: Box::new(initializer) })
     }
     pub fn statement(&mut self) -> Box<Stmt> {
+        if self.check_match(vec!(Token::If)) {
+            return Box::new(self.if_statement());
+        }
+        if self.check_match(vec!(Token::LBrace)) {
+            return Box::new(Stmt::Block(self.block()));
+        }
         let expr = self.expression_statement();
         Box::new(expr)
+    }
+    pub fn if_statement(&mut self) -> Stmt  {
+        self.consume(Token::LParen);
+        let cond = self.expression();
+        self.consume(Token::RParen);
+        let then_branch = self.statement();
+        let mut else_branch = None;
+        if self.check_match(vec!(Token::Else)) {
+            else_branch = Some(self.statement());
+        }
+        Stmt::If { cond: Box::new(cond), then_branch, else_branch }
+    }
+    pub fn block(&mut self) -> Vec<Box<Stmt>> {
+        let mut statements = vec!();
+        while !self.check_match(vec!(Token::RBrace)) && !self.is_at_end() {
+            statements.push(self.declaration());
+        }
+        self.consume(Token::RBrace);
+        return statements;
     }
     pub fn expression_statement(&mut self) -> Stmt {
         let value = self.expression();
@@ -96,7 +132,20 @@ impl Parser {
         Stmt::Expr(Box::new(value))
     }
     pub fn expression(&mut self) -> Expr {
-        return self.equality();
+        return self.assignment();
+    }
+    pub fn assignment(&mut self) -> Expr {
+        let expr = self.equality();
+        if self.check_match(vec!(Token::Eq)) {
+            let value = self.assignment();
+            return match expr {
+                Expr::Variable { name } => {
+                    Expr::Assign { name, value: Box::new(value) } 
+                },
+                _ => panic!("invalid assignment"),
+            }
+        }
+        return expr;
     }
     pub fn equality(&mut self) -> Expr {
         let mut expr = self.comparison();

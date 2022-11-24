@@ -75,6 +75,8 @@ impl<'a> TokenLexer<'a> {
             ')' => Ok(Token::RParen),
             ',' => Ok(Token::Comma),
             ';' => Ok(Token::Semicolon),
+            '{' => Ok(Token::LBrace),
+            '}' => Ok(Token::RBrace),
             '0'..='9' | '.' => {
                 loop {
                     let ch = match chars.peek() {
@@ -105,6 +107,8 @@ impl<'a> TokenLexer<'a> {
 
                 match &src[start..curr] {
                     "var" => Ok(Token::Var),
+                    "if" => Ok(Token::If),
+                    "else" => Ok(Token::Else),
                     "false" => Ok(Token::False),
                     "true" => Ok(Token::True),
                     "wagmi" => Ok(Token::Wagmi),
