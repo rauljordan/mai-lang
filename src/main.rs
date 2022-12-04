@@ -24,8 +24,7 @@ struct Opts {
     input: PathBuf,
 }
 
-#[tokio::main]
-async fn main() -> eyre::Result<()> {
+fn main() -> eyre::Result<()> {
     let opts = Opts::from_args();
     println!("Input file: {:?}", opts.input);
 
@@ -35,30 +34,37 @@ async fn main() -> eyre::Result<()> {
     println!("Lexer tokens: {:?}", lexer_res);
 
 
-    let mut parser = Parser::new(lexer_res);
-    let parser_res = parser.parse();
-    println!("Parsed expression: {:?}", parser_res);
+    let parsed_statements = Parser::new(lexer_res).parse();
+    println!("Parsed expression: {:?}", parsed_statements);
 
-    //let context = Context::create();
-    //let module = context.create_module("tmp");
-    //let builder = context.create_builder();
+    let context = Context::create();
+    let module = context.create_module("tmp");
+    let builder = context.create_builder();
 
-    //// Create FPM
-    //let fpm = PassManager::create(&module);
+    // Pass manager for functions.
+    let fpm = PassManager::create(&module);
 
-    //fpm.add_instruction_combining_pass();
-    //fpm.add_reassociate_pass();
-    //fpm.add_gvn_pass();
-    //fpm.add_cfg_simplification_pass();
-    //fpm.add_basic_alias_analysis_pass();
-    //fpm.add_promote_memory_to_register_pass();
-    //fpm.add_instruction_combining_pass();
-    //fpm.add_reassociate_pass();
+    fpm.add_instruction_combining_pass();
+    fpm.add_reassociate_pass();
+    fpm.add_gvn_pass();
+    fpm.add_cfg_simplification_pass();
+    fpm.add_basic_alias_analysis_pass();
+    fpm.add_promote_memory_to_register_pass();
+    fpm.add_instruction_combining_pass();
+    fpm.add_reassociate_pass();
 
-    //fpm.initialize();
+    fpm.initialize();
 
-    //let item = LLVMTranslator::translate(&context, &builder, &fpm, &module, &parser_res).unwrap();
-    //println!("Translated LLVM IR: {:?}", item.print_to_string());
+    let first_stmt = parsed_statements.first().unwrap();
+    println!("{:?}", first_stmt);
+    let translated = LLVMTranslator::translate(
+        &context, 
+        &builder, 
+        &fpm, 
+        &module, 
+        &first_stmt,
+    ).unwrap();
+    println!("Translated LLVM IR: {}", translated);
 
     Ok(())
 }
