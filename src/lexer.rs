@@ -108,6 +108,11 @@ impl<'a> TokenLexer<'a> {
                 match &src[start..curr] {
                     "var" => Ok(Token::Var),
                     "if" => Ok(Token::If),
+                    "for" => Ok(Token::For),
+                    "fun" => Ok(Token::Fun),
+                    "return" => Ok(Token::Return),
+                    "or" => Ok(Token::Or),
+                    "and" => Ok(Token::And),
                     "else" => Ok(Token::Else),
                     "false" => Ok(Token::False),
                     "true" => Ok(Token::True),

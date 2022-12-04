@@ -11,7 +11,7 @@ pub enum Expr {
         op: Token,
         right: Box<Expr>,
     },
-    Cond {
+    Logical {
         op: Token,
         left: Box<Expr>,
         right: Box<Expr>,
@@ -41,10 +41,23 @@ pub enum Stmt {
     Block(Vec<Box<Stmt>>),
     Expr(Box<Expr>),
     Print(Box<Expr>),
+    Return {
+        keyword: Token,
+        value: Option<Box<Expr>>,
+    },
+    Function {
+        name: Token,
+        params: Vec<Token>,
+        body: Vec<Box<Stmt>>,
+    },
     If {
         cond: Box<Expr>,
         then_branch: Box<Stmt>,
         else_branch: Option<Box<Stmt>>,
+    },
+    While {
+        condition: Box<Expr>,
+        body: Box<Stmt>,
     },
     Var {
         name: Token,
@@ -77,10 +90,37 @@ impl Parser {
         return statements;
     }
     pub fn declaration(&mut self) -> Box<Stmt> {
+        if self.check_match(vec!(Token::Fun)) { 
+            return self.function_declaration();
+        }
         if self.check_match(vec!(Token::Var)) {
             return self.variable_declaration();
         }
         self.statement()
+    }
+    pub fn function_declaration(&mut self) -> Box<Stmt> {
+        let name = self.consume_identifier();
+        self.consume(Token::LParen);
+        let mut params = vec![];
+        if !self.check_match(vec!(Token::RParen)) {
+            params.push(self.consume_identifier());
+            while self.check_match(vec!(Token::Comma)) {
+                params.push(self.consume_identifier());
+            }
+        }
+        self.consume(Token::RParen);
+        self.consume(Token::LBrace);
+        let body = self.block();
+        Box::new(Stmt::Function { name, params, body })
+    }
+    pub fn consume_identifier(&mut self) -> Token {
+        match self.peek() {
+            Token::Ident(_) => {
+                self.advance();
+                self.previous()
+            },
+            _ => panic!("cannot match")
+        }
     }
     pub fn variable_declaration(&mut self) -> Box<Stmt> {
         let name = match self.peek() {
@@ -98,14 +138,62 @@ impl Parser {
         Box::new(Stmt::Var{ name, initializer: Box::new(initializer) })
     }
     pub fn statement(&mut self) -> Box<Stmt> {
+        if self.check_match(vec!(Token::For)) {
+            return self.for_statement();
+        }
         if self.check_match(vec!(Token::If)) {
             return Box::new(self.if_statement());
+        }
+        if self.check_match(vec!(Token::Return)) {
+            return Box::new(self.return_statement());
+        }
+        if self.check_match(vec!(Token::While)) {
+            return Box::new(self.while_statement());
         }
         if self.check_match(vec!(Token::LBrace)) {
             return Box::new(Stmt::Block(self.block()));
         }
         let expr = self.expression_statement();
         Box::new(expr)
+    }
+    pub fn for_statement(&mut self) -> Box<Stmt> {
+        self.consume(Token::LParen);
+        let initializer: Option<Box<Stmt>>;
+        if self.check_match(vec!(Token::Semicolon)) {
+            initializer = None;
+        } else if self.check_match(vec!(Token::Var)) {
+            initializer = Some(self.variable_declaration());
+        } else {
+            initializer = Some(Box::new(self.expression_statement()));
+        }
+
+        let mut cond: Option<Expr> = None;
+        if !self.check_match(vec!(Token::Semicolon)) {
+            cond = Some(self.expression());
+        }
+        self.consume(Token::Semicolon);
+
+        let mut increment: Option<Expr> = None;
+        if !self.check_match(vec!(Token::RParen)) {
+            increment = Some(self.expression());
+        }
+        self.consume(Token::RParen);
+
+        let mut body = self.statement();
+        if increment.is_some() {
+            let expr = Stmt::Expr(Box::new(increment.unwrap()));
+            body = Box::new(Stmt::Block(vec![body, Box::new(expr)]));
+        }
+
+        if cond.is_some() {
+            cond = Some(Expr::Literal { value: "true".to_string() });
+        }
+
+        body = Box::new(Stmt::While { condition: Box::new(cond.unwrap()), body });
+        if initializer.is_some() {
+            body = Box::new(Stmt::Block(vec![initializer.unwrap(), body]));
+        }
+        body
     }
     pub fn if_statement(&mut self) -> Stmt  {
         self.consume(Token::LParen);
@@ -117,6 +205,22 @@ impl Parser {
             else_branch = Some(self.statement());
         }
         Stmt::If { cond: Box::new(cond), then_branch, else_branch }
+    }
+    pub fn return_statement(&mut self) -> Stmt  {
+        let keyword = self.previous();
+        let mut value = None;
+        if !self.check_match(vec!(Token::Semicolon)) {
+            value = Some(Box::new(self.expression()));
+        }
+        self.consume(Token::Semicolon);
+        Stmt::Return { keyword, value }
+    }
+    pub fn while_statement(&mut self) -> Stmt  {
+        self.consume(Token::LParen);
+        let cond = self.expression();
+        self.consume(Token::RParen);
+        let body = self.statement();
+        return Stmt::While { condition: Box::new(cond), body }
     }
     pub fn block(&mut self) -> Vec<Box<Stmt>> {
         let mut statements = vec!();
@@ -135,7 +239,7 @@ impl Parser {
         return self.assignment();
     }
     pub fn assignment(&mut self) -> Expr {
-        let expr = self.equality();
+        let expr = self.or();
         if self.check_match(vec!(Token::Eq)) {
             let value = self.assignment();
             return match expr {
@@ -144,6 +248,24 @@ impl Parser {
                 },
                 _ => panic!("invalid assignment"),
             }
+        }
+        return expr;
+    }
+    pub fn or(&mut self) -> Expr {
+        let mut expr = self.and();
+        while self.check_match(vec!(Token::Or)) {
+            let op = self.previous();
+            let right = self.and();
+            expr = Expr::Logical { left: Box::new(expr), op, right: Box::new(right) }
+        }
+        return expr;
+    }
+    pub fn and(&mut self) -> Expr {
+        let mut expr = self.equality();
+        while self.check_match(vec!(Token::And)) {
+            let op = self.previous();
+            let right = self.equality();
+            expr = Expr::Logical { left: Box::new(expr), op, right: Box::new(right) }
         }
         return expr;
     }

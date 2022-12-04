@@ -26,6 +26,12 @@ pub enum Token {
     RBrace,
     // Literals and identifiers.
     If,
+    While,
+    For,
+    Fun,
+    Return,
+    Or,
+    And,
     Else,
     True,
     False,
