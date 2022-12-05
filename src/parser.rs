@@ -40,7 +40,6 @@ pub enum Expr {
 pub enum Stmt {
     Block(Vec<Box<Stmt>>),
     Expr(Box<Expr>),
-    Print(Box<Expr>),
     Return {
         keyword: Token,
         value: Option<Box<Expr>>,

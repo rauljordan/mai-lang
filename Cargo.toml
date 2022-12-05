@@ -11,3 +11,5 @@ serde = "1.0.145"
 thiserror = "1.0.37"
 eyre = "0.6.8"
 inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = ["llvm14-0"] }
+llvm-sys = "150"
+execute = "0.2.11"

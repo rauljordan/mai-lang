@@ -5,7 +5,6 @@ use inkwell::context::Context;
 use inkwell::passes::PassManager;
 use inkwell::types::BasicMetadataTypeEnum;
 use inkwell::values::{FloatValue,FunctionValue,PointerValue};
-use inkwell::FloatPredicate;
 
 use crate::parser::*;
 use crate::token::Token;
@@ -36,7 +35,7 @@ impl<'a, 'ctx> LLVMTranslator<'a, 'ctx> {
 
     pub fn compile_function_sig(&self, fun: &Stmt) -> Result<FunctionValue<'ctx>, &'static str> {
         let Stmt::Function { name: Token::Ident(fn_name), params, body: _ } = fun else {
-            panic!("not a function");
+            panic!("Not a function");
         };
         let return_type = self.context.f64_type();
         let arg_types = std::iter::repeat(return_type)
@@ -62,8 +61,8 @@ impl<'a, 'ctx> LLVMTranslator<'a, 'ctx> {
     }
 
     pub fn compile_function(&mut self, fun: &Stmt) -> Result<FunctionValue<'ctx>, &'static str> {
-        let Stmt::Function { name: Token::Ident(fn_name), params, body } = fun else {
-            panic!("not a function");
+        let Stmt::Function { name: _, params, body } = fun else {
+            panic!("Not a function");
         };
         let sig = self.compile_function_sig(fun)?;
         if body.is_empty() {
@@ -111,7 +110,7 @@ impl<'a, 'ctx> LLVMTranslator<'a, 'ctx> {
                 }
                 return Ok(self.context.f64_type().const_zero());
             },
-            item => panic!("could not handle value: {:?}", item)
+            item => panic!("Could not handle value: {:?}", item)
         }
     }
 
@@ -166,25 +165,4 @@ impl<'a, 'ctx> LLVMTranslator<'a, 'ctx> {
         tr.compile_function(stmt)
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
