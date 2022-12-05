@@ -125,6 +125,9 @@ fn main() -> eyre::Result<()> {
     println!("Compiled wasm to wat:");
     println!("{}", wat_output);
 
+    let mut file = File::create("/tmp/main.wat")?;
+    file.write_all(wat_output.clone().into_bytes().as_slice())?;
+
     // Running the web assembly module with wasmer;
     let mut store = wasmer::Store::default();
     let module = wasmer::Module::new(&store, &wat_output)?;
