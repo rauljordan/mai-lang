@@ -1,1 +1,5 @@
 /target
+main.wasm
+main.o
+main.ll
+main.wat
