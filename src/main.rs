@@ -136,9 +136,11 @@ fn main() -> eyre::Result<()> {
     let instance = wasmer::Instance::new(&mut store, &module, &import_object)?;
 
     let safe_sub = instance.exports.get_function("safe_sub")?;
-    let result = safe_sub.call(&mut store, &[wasmer::Value::F64(20.0), wasmer::Value::F64(13.0)])?;
+    println!("Trying inputs 3.0 and 4.0 into safe_sub");
+    let result = safe_sub.call(&mut store, &[wasmer::Value::F64(3.0), wasmer::Value::F64(4.0)])?;
     println!("{:?}", result[0]);
-    let result = safe_sub.call(&mut store, &[wasmer::Value::F64(20.0), wasmer::Value::F64(21.0)])?;
+    println!("Trying inputs 3.0 and 1.0 into safe_sub");
+    let result = safe_sub.call(&mut store, &[wasmer::Value::F64(3.0), wasmer::Value::F64(1.0)])?;
     println!("{:?}", result[0]);
     Ok(())
 }

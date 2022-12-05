@@ -1,4 +1,4 @@
-gm safe_sub(x, y) {
+mai safe_sub(x, y) {
     if (x > y) {
         return x - y;
     } else {
