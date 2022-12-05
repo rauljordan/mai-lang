@@ -13,9 +13,9 @@ use inkwell::passes::PassManager;
 mod token;
 mod lexer;
 mod parser;
-mod ir_translator;
+mod llvm_translator;
 
-use ir_translator::LLVMTranslator;
+use llvm_translator::Translator;
 use parser::Parser;
 use lexer::TokenLexer;
 use token::Token;
@@ -29,16 +29,23 @@ struct Opts {
 
 fn main() -> eyre::Result<()> {
     let opts = Opts::from_args();
-    println!("Input file: {:?}", opts.input);
+    println!("Input file path: {:?}", opts.input);
 
     let input = fs::read_to_string(opts.input).unwrap();
-    println!("Raw input contents: {:?}", input);
+    println!("Raw input contents:");
+    println!("{:?}", input);
+    println!("");
+
     let lexer_res = TokenLexer::new(input.as_str()).collect::<Vec<Token>>();
-    println!("Lexer tokens: {:?}", lexer_res);
+    println!("Lexed tokens:");
+    println!("{:?}", lexer_res);
+    println!("");
 
 
     let parsed_statements = Parser::new(lexer_res).parse();
-    println!("Parsed expression: {:?}", parsed_statements);
+    println!("Parsed expression:");
+    println!("{:?}", parsed_statements);
+    println!("");
 
     let context = Context::create();
     let module = context.create_module("tmp");
@@ -60,7 +67,7 @@ fn main() -> eyre::Result<()> {
 
     // TODO: Translate all statements into LLVM IR.
     let first_stmt = parsed_statements.first().unwrap();
-    let translated = LLVMTranslator::translate(
+    let translated = Translator::translate(
         &context, 
         &builder, 
         &fpm, 
@@ -118,6 +125,18 @@ fn main() -> eyre::Result<()> {
     println!("Compiled wasm to wat:");
     println!("{}", wat_output);
 
+    // Running the web assembly module with wasmer;
+    let mut store = wasmer::Store::default();
+    let module = wasmer::Module::new(&store, &wat_output)?;
+    // The module doesn't import anything, so we create an empty import object.
+    let import_object = wasmer::imports! {};
+    let instance = wasmer::Instance::new(&mut store, &module, &import_object)?;
+
+    let safe_sub = instance.exports.get_function("safe_sub")?;
+    let result = safe_sub.call(&mut store, &[wasmer::Value::F64(20.0), wasmer::Value::F64(13.0)])?;
+    println!("{:?}", result[0]);
+    let result = safe_sub.call(&mut store, &[wasmer::Value::F64(20.0), wasmer::Value::F64(21.0)])?;
+    println!("{:?}", result[0]);
     Ok(())
 }
 

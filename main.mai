@@ -1,4 +1,7 @@
-fun sayHi(x, y) {
-  return x + y;
+gm safe_sub(x, y) {
+    if (x > y) {
+        return x - y;
+    } else {
+        return 0;
+    }
 }
-sayHi(1, 2);

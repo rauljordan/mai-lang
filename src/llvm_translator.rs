@@ -4,22 +4,23 @@ use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::passes::PassManager;
 use inkwell::types::BasicMetadataTypeEnum;
-use inkwell::values::{FloatValue,FunctionValue,PointerValue};
+use inkwell::basic_block::BasicBlock;
+use inkwell::values::{BasicValue,FloatValue,FunctionValue,PointerValue};
+use inkwell::FloatPredicate;
 
 use crate::parser::*;
 use crate::token::Token;
 
-pub struct LLVMTranslator<'a, 'ctx> {
+pub struct Translator<'a, 'ctx> {
     pub context: &'ctx Context,
     pub builder: &'a Builder<'ctx>,
     pub fpm: &'a PassManager<FunctionValue<'ctx>>,
     pub module: &'a Module<'ctx>,
     pub variables: HashMap<String, PointerValue<'ctx>>,
-    fn_value_opt: Option<FunctionValue<'ctx>>,
+    pub fn_value_opt: Option<FunctionValue<'ctx>>,
 }
 
-impl<'a, 'ctx> LLVMTranslator<'a, 'ctx> {
-    /// Builds a new stack allocation instruction in LLVM.
+impl<'a, 'ctx> Translator<'a, 'ctx> {
     fn create_stack_alloc(&self, name: &str) -> PointerValue<'ctx> {
         let builder = self.context.create_builder();
 
@@ -33,7 +34,7 @@ impl<'a, 'ctx> LLVMTranslator<'a, 'ctx> {
         builder.build_alloca(self.context.f64_type(), name)
     }
 
-    pub fn compile_function_sig(&self, fun: &Stmt) -> Result<FunctionValue<'ctx>, &'static str> {
+    pub fn translate_function_sig(&self, fun: &Stmt) -> Result<FunctionValue<'ctx>, &'static str> {
         let Stmt::Function { name: Token::Ident(fn_name), params, body: _ } = fun else {
             panic!("Not a function");
         };
@@ -47,7 +48,6 @@ impl<'a, 'ctx> LLVMTranslator<'a, 'ctx> {
         let fn_type = self.context.f64_type().fn_type(args, false); // No var args.
         let fn_val = self.module.add_function(fn_name.as_str(), fn_type, None);
 
-        // Set the argument names.
         for (i, arg) in fn_val.get_param_iter().enumerate() {
             let param = params[i].clone();
             let Token::Ident(arg_ident) = param else {
@@ -56,15 +56,14 @@ impl<'a, 'ctx> LLVMTranslator<'a, 'ctx> {
             arg.into_float_value().set_name(arg_ident.as_str());
         }
 
-        // finally return built prototype
         Ok(fn_val)
     }
 
-    pub fn compile_function(&mut self, fun: &Stmt) -> Result<FunctionValue<'ctx>, &'static str> {
+    pub fn translate_function(&mut self, fun: &Stmt) -> Result<FunctionValue<'ctx>, &'static str> {
         let Stmt::Function { name: _, params, body } = fun else {
             panic!("Not a function");
         };
-        let sig = self.compile_function_sig(fun)?;
+        let sig = self.translate_function_sig(fun)?;
         if body.is_empty() {
             return Ok(sig);
         }
@@ -83,12 +82,10 @@ impl<'a, 'ctx> LLVMTranslator<'a, 'ctx> {
             self.variables.insert(arg_ident, alloca);
         }
 
-        // compile body
         let body = self.translate_stmt(body.first().unwrap())?;
 
         self.builder.build_return(Some(&body));
 
-        // return the whole thing after verification and optimization
         if sig.verify(true) {
             self.fpm.run_on(&sig);
             return Ok(sig);
@@ -100,9 +97,17 @@ impl<'a, 'ctx> LLVMTranslator<'a, 'ctx> {
         Err("Invalid generated function")
     }
 
-    fn translate_stmt(&self, stmt: &Box<Stmt>) -> Result<FloatValue<'ctx>, &'static str> {
+    fn translate_stmt(&mut self, stmt: &Box<Stmt>) -> Result<FloatValue<'ctx>, &'static str> {
         match stmt.as_ref() {
             Stmt::Expr(expr) => self.translate_expr(expr),
+            Stmt::If { 
+                cond, 
+                then_branch, 
+                else_branch,
+            } => self.translate_conditional(cond, then_branch, else_branch),
+            Stmt::Block(statements) => {
+                return self.translate_stmt(statements.first().unwrap());
+            }
             Stmt::Return { keyword: _, value } => {
                 if value.is_some() {
                     let value = value.as_ref().unwrap();
@@ -112,6 +117,56 @@ impl<'a, 'ctx> LLVMTranslator<'a, 'ctx> {
             },
             item => panic!("Could not handle value: {:?}", item)
         }
+    }
+
+    pub fn translate_conditional(
+        &mut self,
+        cond: &Box<Expr>, 
+        then_branch: &Box<Stmt>, 
+        else_branch: &Option<Box<Stmt>>
+    ) -> Result<FloatValue<'ctx>, &'static str> {
+        let parent = self.fn_value_opt.unwrap();
+        let zero_const = self.context.f64_type().const_float(0.0);
+
+        // create condition by comparing without 0.0 and returning an int
+        let cond = self.translate_expr(cond)?;
+        let cond = self
+            .builder
+            .build_float_compare(FloatPredicate::ONE, cond, zero_const, "ifcond");
+
+        // build branch
+        let then_bb = self.context.append_basic_block(parent, "then");
+        let else_bb = self.context.append_basic_block(parent, "else");
+        let cont_bb = self.context.append_basic_block(parent, "ifcont");
+
+        self.builder.build_conditional_branch(cond, then_bb, else_bb);
+
+        // build then block
+        self.builder.position_at_end(then_bb);
+        let then_val = self.translate_stmt(then_branch)?;
+        self.builder.build_unconditional_branch(cont_bb);
+
+        let then_bb = self.builder.get_insert_block().unwrap();
+
+        let mut incoming: Vec<(&dyn BasicValue, BasicBlock)> = vec![];
+        incoming.push((&then_val, then_bb));
+
+        // build else block
+        self.builder.position_at_end(else_bb);
+        let else_b = *else_branch.clone().unwrap();
+        let else_box = Box::new(else_b);
+        let else_val = self.translate_stmt(&else_box)?;
+        let else_bb = self.builder.get_insert_block().unwrap();
+        self.builder.build_unconditional_branch(cont_bb);
+        incoming.push((&else_val, else_bb));
+
+        // emit merge block
+        self.builder.position_at_end(cont_bb);
+
+        let phi = self.builder.build_phi(self.context.f64_type(), "iftmp");
+        phi.add_incoming(incoming.as_slice());
+
+        Ok(phi.as_basic_value().into_float_value())
     }
 
     pub fn translate_expr(&self, expr: &Box<Expr>) -> Result<FloatValue<'ctx>, &'static str> {
@@ -139,6 +194,23 @@ impl<'a, 'ctx> LLVMTranslator<'a, 'ctx> {
 
                     match op {
                         Token::Plus => Ok(self.builder.build_float_add(lhs, rhs, "tmpadd")),
+                        Token::Minus => Ok(self.builder.build_float_sub(lhs, rhs, "tmpsub")),
+                        Token::Less => Ok({
+                            let cmp = self
+                                .builder
+                                .build_float_compare(FloatPredicate::ULT, lhs, rhs, "tmpcmp");
+
+                            self.builder
+                                .build_unsigned_int_to_float(cmp, self.context.f64_type(), "tmpbool")
+                        }),
+                        Token::Greater => Ok({
+                            let cmp = self
+                                .builder
+                                .build_float_compare(FloatPredicate::ULT, rhs, lhs, "tmpcmp");
+
+                            self.builder
+                                .build_unsigned_int_to_float(cmp, self.context.f64_type(), "tmpbool")
+                        }),
                         _ => Err("unsupported binary operation"),
                     }
             },
@@ -153,7 +225,7 @@ impl<'a, 'ctx> LLVMTranslator<'a, 'ctx> {
         module: &'a Module<'ctx>,
         stmt: &Stmt,
     ) -> Result<FunctionValue<'ctx>, &'static str> {
-        let mut tr = LLVMTranslator {
+        let mut tr = Translator {
             context,
             builder,
             fpm: pass_manager,
@@ -162,7 +234,7 @@ impl<'a, 'ctx> LLVMTranslator<'a, 'ctx> {
             variables: HashMap::new(),
         };
 
-        tr.compile_function(stmt)
+        tr.translate_function(stmt)
     }
 }
 

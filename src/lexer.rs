@@ -109,7 +109,7 @@ impl<'a> TokenLexer<'a> {
                     "var" => Ok(Token::Var),
                     "if" => Ok(Token::If),
                     "for" => Ok(Token::For),
-                    "fun" => Ok(Token::Fun),
+                    "gm" => Ok(Token::Fun),
                     "return" => Ok(Token::Return),
                     "or" => Ok(Token::Or),
                     "and" => Ok(Token::And),

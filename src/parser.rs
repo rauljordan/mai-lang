@@ -1,6 +1,6 @@
 use crate::token::Token;
 
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub enum Expr {
     BinaryExpr {
         op: Token,
@@ -36,7 +36,7 @@ pub enum Expr {
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub enum Stmt {
     Block(Vec<Box<Stmt>>),
     Expr(Box<Expr>),
